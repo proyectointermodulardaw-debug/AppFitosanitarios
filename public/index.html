@@ -1,1 +1,31 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>APP FITOSANITARIOS</title>
+    <link rel="stylesheet" href="res/styles.css">
+</head>
+<body>
+    <div class="Login-container">
+        <h3>Inicio sesion</h3>
+        <form>
+            <label for="username">Usuario:</label>
+            <input type="text" id="user" name="username" placeholder="Introduce tu correo" required>
 
+            <label for="password">Contraseña:</label>
+            <div>
+                <input type="password" id="password" name="password" placeholder="Introduce tu contraseña" required>
+                <button type="button" id="togglePassword">Mostrar contraseña </button>
+            </div>
+            <div class="button">
+                <button type="submit" class="login-buton">Iniciar sesión</button>
+                <button type="button" class="register-buton">Registrarse</button>
+            </div>
+            <a href="#" class="forgot-password">¿Olvidaste tu contraseña?</a>
+        </form>
+    </div>
+
+    <script src="res/scripts.js"></script>
+</body>
+</html>
