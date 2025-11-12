@@ -1,11 +1,22 @@
 name: Notify Telegram
 
+permissions:
+  contents: read
+  pull-requests: read
+  issues: read
+
 on:
-  push:            # <- sin 'branches', así pilla TODAS las ramas y también tags
+  push:            # todas las ramas y tags
   pull_request:    # PR en cualquier rama
     types: [opened, closed, reopened, synchronize]
   release:
     types: [published]
+  issue_comment:    # comentarios en la conversación de la PR (las PR son issues)
+    types: [created, edited]
+  pull_request_review_comment:   # comentarios en línea del diff
+    types: [created, edited]
+  pull_request_review:           # estados de revisión
+    types: [submitted, edited, dismissed]
 
 jobs:
   notify:
@@ -14,12 +25,11 @@ jobs:
       - name: Notify (push)
         if: github.event_name == 'push'
         run: |
-          # Para push a branch o a tag
           REF_NAME="${GITHUB_REF_NAME}"   # rama o tag
           ACTOR="${GITHUB_ACTOR}"
           REPO="${GITHUB_REPOSITORY}"
 
-          # Lista de commits (si los hay; en push de tag puede venir vacío)
+          # Lista de commits (si los hay; en push de tag puede venir vacía)
           if jq -e '.commits | length > 0' "$GITHUB_EVENT_PATH" > /dev/null; then
             COMMITS=$(jq -r '.commits[] | "- \(.message) [\(.id[0:7])] by \(.author.username // .author.name)"' "$GITHUB_EVENT_PATH")
           else
@@ -27,7 +37,7 @@ jobs:
           fi
 
           COMMITS_ENC=$(printf "%s" "$COMMITS" | jq -s -R -r @uri)
-          TEXT="📦 Repo: ${REPO}%0A🔀 Ref: ${REF_NAME}%0A👤 Actor: ${ACTOR}%0A📝 Commits:%0A${COMMITS_ENC}"
+          TEXT="🔀 Ref: ${REF_NAME}%0A👤 Actor: ${ACTOR}%0A📝 Commits:%0A${COMMITS_ENC}"
 
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
             -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
@@ -60,8 +70,81 @@ jobs:
         run: |
           NAME="${{ github.event.release.name }}"
           TAG="${{ github.event.release.tag_name }}"
-          URL="${{ github.event.release.html_url }}"
+          URL=$(jq -r '.release.html_url' "$GITHUB_EVENT_PATH")
           TEXT=$(printf "🚀 Release publicada:\n🏷️ %s (%s)\n🔗 %s\n👤 %s" "$NAME" "$TAG" "$URL" "${GITHUB_ACTOR}" | jq -s -R -r @uri)
+
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d message_thread_id="${{ secrets.TELEGRAM_TOPIC_ID }}" \
+            -d text="$TEXT" \
+            -d disable_web_page_preview=true > /dev/null
+
+      - name: Notify (issue_comment on PR)
+        if: github.event_name == 'issue_comment'
+        run: |
+          # Solo si el comentario es en una PR (no en un issue normal)
+          if jq -e '.issue.pull_request' "$GITHUB_EVENT_PATH" > /dev/null; then
+            BODY=$(jq -r '.comment.body' "$GITHUB_EVENT_PATH" | head -c 500)
+            PR_NUMBER=$(jq -r '.issue.number' "$GITHUB_EVENT_PATH")
+            PR_TITLE=$(jq -r '.issue.title' "$GITHUB_EVENT_PATH")
+            PR_URL=$(jq -r '.issue.pull_request.html_url' "$GITHUB_EVENT_PATH")
+            COMMENT_URL=$(jq -r '.comment.html_url' "$GITHUB_EVENT_PATH")
+            USER="${GITHUB_ACTOR}"
+
+            TEXT=$(printf "💬 Nuevo comentario en PR #%s\n🧩 %s\n👤 %s\n📝 %s\n🔗 PR: %s\n🔗 Comentario: %s" \
+              "$PR_NUMBER" "$PR_TITLE" "$USER" "$BODY" "$PR_URL" "$COMMENT_URL" | jq -s -R -r @uri)
+
+            curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+              -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+              -d message_thread_id="${{ secrets.TELEGRAM_TOPIC_ID }}" \
+              -d text="$TEXT" \
+              -d disable_web_page_preview=true > /dev/null
+          fi
+
+      - name: Notify (pull_request_review_comment)
+        if: github.event_name == 'pull_request_review_comment'
+        run: |
+          BODY=$(jq -r '.comment.body' "$GITHUB_EVENT_PATH" | head -c 500)
+          PATH=$(jq -r '.comment.path' "$GITHUB_EVENT_PATH")
+          LINE=$(jq -r '.comment.line // .comment.original_line // "?"' "$GITHUB_EVENT_PATH")
+
+          PR_NUMBER=$(jq -r '.pull_request.number' "$GITHUB_EVENT_PATH")
+          PR_TITLE=$(jq -r '.pull_request.title' "$GITHUB_EVENT_PATH")
+          PR_URL=$(jq -r '.pull_request.html_url' "$GITHUB_EVENT_PATH")
+          COMMENT_URL=$(jq -r '.comment.html_url' "$GITHUB_EVENT_PATH")
+          USER="${GITHUB_ACTOR}"
+
+          TEXT=$(printf "🧷 Comentario en línea PR #%s\n🧩 %s\n👤 %s\n📄 %s:%s\n📝 %s\n🔗 PR: %s\n🔗 Comentario: %s" \
+            "$PR_NUMBER" "$PR_TITLE" "$USER" "$PATH" "$LINE" "$BODY" "$PR_URL" "$COMMENT_URL" | jq -s -R -r @uri)
+
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d message_thread_id="${{ secrets.TELEGRAM_TOPIC_ID }}" \
+            -d text="$TEXT" \
+            -d disable_web_page_preview=true > /dev/null
+
+      - name: Notify (pull_request_review)
+        if: github.event_name == 'pull_request_review'
+        run: |
+          STATE=$(jq -r '.review.state' "$GITHUB_EVENT_PATH")   # approved / changes_requested / commented / dismissed
+          BODY=$(jq -r '.review.body // ""' "$GITHUB_EVENT_PATH" | head -c 500)
+
+          PR_NUMBER=$(jq -r '.pull_request.number' "$GITHUB_EVENT_PATH")
+          PR_TITLE=$(jq -r '.pull_request.title' "$GITHUB_EVENT_PATH")
+          PR_URL=$(jq -r '.pull_request.html_url' "$GITHUB_EVENT_PATH")
+          REVIEW_URL=$(jq -r '.review.html_url // .pull_request.html_url' "$GITHUB_EVENT_PATH")
+          USER="${GITHUB_ACTOR}"
+
+          EMOJI="📝"
+          case "$STATE" in
+            approved) EMOJI="✅" ;;
+            changes_requested) EMOJI="⚠️" ;;
+            commented) EMOJI="💬" ;;
+            dismissed) EMOJI="🚫" ;;
+          esac
+
+          TEXT=$(printf "%s Revisión en PR #%s (%s)\n🧩 %s\n👤 %s\n📝 %s\n🔗 PR: %s\n🔗 Revisión: %s" \
+            "$EMOJI" "$PR_NUMBER" "$STATE" "$PR_TITLE" "$USER" "$BODY" "$PR_URL" "$REVIEW_URL" | jq -s -R -r @uri)
 
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
             -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
