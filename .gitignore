@@ -77,4 +77,4 @@ serviceAccount.json
 
 
 # No guardamos archivos .cache que hay dentro de /.firebase
-.firebase/*.cache
+.firebase/
