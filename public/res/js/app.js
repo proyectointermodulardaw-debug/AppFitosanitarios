@@ -1,14 +1,8 @@
-// public/res/app.js
-// Ejecuta esto servido por Firebase Hosting (emulador o deploy),
-// porque /__/firebase/init.json solo existe ahí.
-
+// --- Firebase imports ---
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
-import {
-    getAuth,
-    createUserWithEmailAndPassword,
-    signInWithEmailAndPassword,
-    sendPasswordResetEmail,
-} from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
+import {getAuth, signInWithEmailAndPassword} from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
+// -- Other imports ---
+import { showSnackbar } from "../js/modules/snackbar.js";
 
 // --- Helpers UI ---
 const $ = (sel) => document.querySelector(sel);
@@ -26,33 +20,13 @@ const firebaseConfig = await res.json();               // Parsea JSON
 const app = initializeApp(firebaseConfig);  // Inicializa Firebase
 const auth = getAuth(app);                   // Inicializa Auth
 
-// --- Snackbar ---
-function showSnackbar(message, type = "info", duration = 3000) {
-  const existing = document.querySelector(".snackbar");
-  if (existing) existing.remove();
-
-  const snackbar = document.createElement("div");
-  snackbar.className = `snackbar ${type}`;
-  snackbar.textContent = message;
-  document.body.appendChild(snackbar);
-
-  void snackbar.offsetWidth;
-  snackbar.classList.add("show");
-
-  setTimeout(() => {
-    snackbar.classList.remove("show");
-    setTimeout(() => snackbar.remove(), 400);
-  }, duration);
-}
-
 // --- DOM ---
 const form = document.querySelector('form');    // el formulario
-const emailEl = $('#user');                  // el input email
-const passEl = $('#password');             // el input contraseña
-const registerBtn = $('.register-buton');   // el botón registrar
-const toggleBtn = $('#togglePassword');              // el botón mostrar/ocultar
-const forgotLink = $('.forgot-password');   // el enlace "olvidé contraseña"
-
+const emailEl = document.getElementById('user');                  // el input email
+const passEl = document.getElementById('password');             // el input contraseña
+const registerBtn = document.querySelector('.register-buton');   // el botón registrar
+const toggleBtn = document.getElementById('togglePassword');              // el botón mostrar/ocultar
+const forgotLink = document.querySelector('.forgot-password');   // el enlace "olvidé contraseña"
 // --- Funciones activas ---
 checkFormReady(); // habilitar botones cuando ambos campos estén rellenos
 checkTiempoRealEmail(); // validación en tiempo real del email
@@ -84,10 +58,6 @@ form?.addEventListener('submit', async (e) => {     // al enviar el formulario
 
         // CONTRASEÑA.
         const pass = passEl.value;                // obtiene la contraseña
-        const passwordCheck = validatePassword(pass);  // Validar la contraseña antes de intentar iniciar sesión
-          if (passwordCheck !== true) {
-            throw new Error(passwordCheck); // Lanza excepcion si la contraseña no es válida -> bloque catch.
-          }
 
         // INTENTO DE LOGIN.
         const cred = await signInWithEmailAndPassword(auth, email, pass);   // intenta loguear
@@ -132,8 +102,9 @@ registerBtn?.addEventListener('click', async () => {  // al hacer clic en el bot
 // --- Reset contraseña ---
 forgotLink?.addEventListener('click', () => {    // al hacer clic en el enlace
     try {
-        //await sendPasswordResetEmail(auth, email);  // intenta enviar el email
-        showSnackbar('Funcionalidad de recuperación de contraseña deshabilitada. Contacta con el administrador.', 'error', 6000); // Mensaje de error
+        const email = emailEl.value.trim();
+        localStorage.setItem('resetEmail', email);
+        window.location.href = '/login/resetpassword/resetpassword.html';
     } catch (err) {
         showSnackbar(msgFromAuthError(err), 'error');   // muestra error amigable SOLO DEBUG
     }
@@ -232,3 +203,4 @@ function validateEmail(email) {
   }
   return true;
 }
+
